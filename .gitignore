@@ -1,0 +1,27 @@
+bin/
+obj/
+*.user
+*.userosscache
+*.suo
+*.cache
+*.dll
+*.exe
+*.pdb
+.vs/
+.vscode/
+.idea/
+*.swp
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+packages/
+*.nupkg
+project.lock.json
+project.fragment.lock.json
+.kilo/
+
+# Auto-added by export script
+.export.state.json
+.exportignore.json
+context.txt
