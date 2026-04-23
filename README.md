@@ -24,19 +24,19 @@ disclaimer: anyone with any competence can probably tell the algorithm is far fr
 ## Limitations
 
 - not a lot of features. i might add more later but this is just for me, so unless i need a new feature i probably won't add it.
-- can't go very fast. the theoretical limit on windows is 1000 CPS, and even with overhead and other processes at whatnot it should still be around 800, but since the program is meant to be hard to detect with all the maths and whatnot it can only get to around 400-ish without dropping off massively. stats:
+- can't go very fast. the theoretical limit on windows is 1000 cps, and even with overhead and other processes at whatnot it should still be around 800, but since the program is meant to be hard to detect with all the maths and whatnot it can only get to around 400-ish without dropping off massively. stats:
 
-|target|real|mean|stddev|bitwise dupes|near floor|
-|-|-|-|-|-|-|
-|5|4.8|209.62ms|21.75ms|0|0|
-|10|9.4|106.28ms|12.01ms|0|0|
-|20|18.8|53.25ms|5.43ms|0|0|
-|50|48.8|20.47ms|2.92ms|0|0|
-|400|395.6|2.53ms|0.23ms|0|0|
-|500|460.9|2.17ms|0.16ms|0|45|
-|600|442.7|2.26ms|0.15ms|0|19|
+    |target|real|mean|stddev|bitwise dupes|near floor|
+    |-|-|-|-|-|-|
+    |5|4.8|209.62ms|21.75ms|0|0|
+    |10|9.4|106.28ms|12.01ms|0|0|
+    |20|18.8|53.25ms|5.43ms|0|0|
+    |50|48.8|20.47ms|2.92ms|0|0|
+    |400|395.6|2.53ms|0.23ms|0|0|
+    |500|460.9|2.17ms|0.16ms|0|45|
+    |600|442.7|2.26ms|0.15ms|0|19|
 
-notice how as the target cps increases the real cps gets capped at around 460.
+    notice how as the target cps increases the real cps gets capped at around 460.
 
 ## Installation
 
