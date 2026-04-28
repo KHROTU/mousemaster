@@ -5,11 +5,11 @@ namespace MouseMaster
     {
         public int HotkeyAutoClick { get; set; } = (int)Keys.F6;
         public int ActivationMode { get; set; } = 0;
-        public int HoldDelayMs { get; set; } = 200;
+        public int HoldDelayMs { get; set; } = 150;
         public int MouseButtonIndex { get; set; } = 0;
         public bool IsManualInterval { get; set; } = true;
         public decimal IntervalSeconds { get; set; } = 0.070M;
-        public decimal TargetCPS { get; set; } = 14;
+        public decimal TargetCPS { get; set; } = 13;
         public int StartDelay { get; set; } = 0;
         public bool Randomize { get; set; } = true;
         public int RandomStrength { get; set; } = 8;
@@ -22,5 +22,8 @@ namespace MouseMaster
         public bool AutoStop { get; set; } = false;
         public int AutoStopLimit { get; set; } = 1000;
         public int InputMethod { get; set; } = 0; // 0 = mouse_event, 1 = interception
+        public bool NotificationEnabled { get; set; } = false;
+        public int NotificationPosition { get; set; } = 0;
+        public int NotificationOpacity { get; set; } = 100;
     }
 }

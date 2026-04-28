@@ -80,6 +80,7 @@ if you want to use interception as your input method you need to install that as
 - select your target mouse button (lmb/mmb/rmb).
 - choose between "toggle" and "hold" mode. in toggle mode, press your hotkey to start/stop autoclicking, and in hold mode, hold your target mouse button to start/stop autoclicking, and press your hotkey to enable/disable autoclicking (e.g. when you need to hold your key without clicking it, press your hotkey to stop it from doing anything).
 - adjust the humanisation settings. the default ones are fine but you can also fine-tune them.
+- enable/disable toast notifications and tweak the position/opacity in the settings tab if you want to know the state change.
 
 ---
 

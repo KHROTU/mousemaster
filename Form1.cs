@@ -28,6 +28,7 @@ namespace MouseMaster
         private bool isAutoClicking = false;
         private bool isHoldArmed = false;
         private bool _isApplyingSettings = false;
+        private ToastManager _toastManager;
         private Panel pnlSidebar, pnlContent;
         private FlowLayoutPanel viewClicker, viewSettings;
         private Button btnMenuClicker, btnMenuSettings;
@@ -39,12 +40,15 @@ namespace MouseMaster
         private Label lblAutoClickStatus;
         private Label lblHotkeyListening;
         private CheckBox chkRandom, chkJitter, chkFixed, chkStop;
+        private CheckBox chkNotification;
+        private ComboBox cmbNotificationPosition;
+        private NumericUpDown numNotificationOpacity;
         public Form1()
         {
             InitializeComponent();
             this.Controls.Clear();
             LoadSettings();
-            this.Text = "MouseMaster v0.1.0";
+            this.Text = "MouseMaster v0.2.0";
             this.Size = new Size(680, 640);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.BackColor = C_Background;
@@ -53,6 +57,7 @@ namespace MouseMaster
             this.ShowIcon = false;
             this.DoubleBuffered = true;
             InitializeHooks();
+            _toastManager = new ToastManager();
             SetupUI();
             ApplySettingsToUI();
             SwitchView(viewClicker, btnMenuClicker);
@@ -71,16 +76,18 @@ namespace MouseMaster
             {
                 if (settings.StartDelay > 0) await Task.Delay(settings.StartDelay, token);
                 var engine = new ClickerEngine(settings);
+                var jitterEngine = new JitterEngine(settings);
                 int clickCount = 0;
                 while (!token.IsCancellationRequested)
                 {
                     var sample = engine.Next();
                     int targetX = settings.FixedLocation ? settings.FixedX : Cursor.Position.X;
                     int targetY = settings.FixedLocation ? settings.FixedY : Cursor.Position.Y;
-                    if (settings.Jitter && (sample.JitterX != 0 || sample.JitterY != 0))
+                    var (jx, jy) = jitterEngine.AdvanceAndGet();
+                    if (jx != 0 || jy != 0)
                     {
-                        targetX += sample.JitterX;
-                        targetY += sample.JitterY;
+                        targetX += jx;
+                        targetY += jy;
                         InputSimulator.Move(targetX, targetY);
                     }
                     long loopStart = Stopwatch.GetTimestamp();
@@ -245,6 +252,18 @@ namespace MouseMaster
             pnlInput.Controls.Add(MakeRow("Backend:", cmbInputMethod));
             pnlInput.Controls.Add(lblInputMethodStatus);
             main.Controls.Add(pnlInput);
+            FlowLayoutPanel pnlNotif = CreateCard("Notifications");
+            chkNotification = new CheckBox { Text = "Enable Toast Notifications", AutoSize = true, ForeColor = C_Text, Margin = new Padding(0, 5, 0, 15) };
+            chkNotification.CheckedChanged += (s, e) => { cmbNotificationPosition.Enabled = chkNotification.Checked; numNotificationOpacity.Enabled = chkNotification.Checked; SaveUItoSettings(); };
+            cmbNotificationPosition = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 150, BackColor = C_Input, ForeColor = C_Text, FlatStyle = FlatStyle.Flat };
+            cmbNotificationPosition.Items.AddRange(new object[] { "Top Left", "Top Right", "Bottom Left", "Bottom Right", "Center" });
+            cmbNotificationPosition.SelectedIndexChanged += (s, e) => SaveUItoSettings();
+            numNotificationOpacity = CreateNum(10, 100, 100, 0);
+            numNotificationOpacity.ValueChanged += (s, e) => SaveUItoSettings();
+            pnlNotif.Controls.Add(chkNotification);
+            pnlNotif.Controls.Add(MakeRow("Position:", cmbNotificationPosition));
+            pnlNotif.Controls.Add(MakeRow("Opacity (%):", numNotificationOpacity));
+            main.Controls.Add(pnlNotif);
             return main;
         }
         private void ApplyInputMethod()
@@ -277,12 +296,14 @@ namespace MouseMaster
                 autoClickToken?.Cancel();
                 isAutoClicking = false;
                 UpdateStatus(lblAutoClickStatus, "Status: STOPPED", Color.IndianRed);
+                _toastManager.Notify("Auto-click OFF");
             }
             else
             {
                 isAutoClicking = true;
                 autoClickToken = new CancellationTokenSource();
                 UpdateStatus(lblAutoClickStatus, "Status: RUNNING", Color.LimeGreen);
+                _toastManager.Notify("Auto-click ON");
                 Task.Run(() => RunAutoClicker(autoClickToken.Token));
             }
         }
@@ -293,6 +314,7 @@ namespace MouseMaster
             {
                 autoClickToken?.Cancel();
                 isAutoClicking = false;
+                _toastManager.Notify("Auto-click OFF");
             }
             if (settings.ActivationMode == 1 && isHoldArmed) UpdateStatus(lblAutoClickStatus, "Status: ARMED", C_Accent);
         }
@@ -315,8 +337,8 @@ namespace MouseMaster
                 else
                 {
                     isHoldArmed = !isHoldArmed;
-                    if (!isHoldArmed) DisarmAndStop();
-                    else UpdateStatus(lblAutoClickStatus, "Status: ARMED", C_Accent);
+                    if (!isHoldArmed) { DisarmAndStop(); _toastManager.Notify("Armed OFF"); }
+                    else { UpdateStatus(lblAutoClickStatus, "Status: ARMED", C_Accent); _toastManager.Notify("Armed ON"); }
                 }
             }
         }
@@ -387,6 +409,10 @@ namespace MouseMaster
             settings.ActivationMode = cmbActMode.SelectedIndex;
             settings.HoldDelayMs = (int)numHoldDelay.Value;
             settings.InputMethod = cmbInputMethod.SelectedIndex;
+            settings.NotificationEnabled = chkNotification.Checked;
+            settings.NotificationPosition = cmbNotificationPosition.SelectedIndex;
+            settings.NotificationOpacity = (int)numNotificationOpacity.Value;
+            UpdateToastManager();
         }
         private void ApplySettingsToUI()
         {
@@ -423,6 +449,12 @@ namespace MouseMaster
                 numHoldDelay.Enabled = settings.ActivationMode == 1;
                 cmbInputMethod.SelectedIndex = Math.Max(0, Math.Min(1, settings.InputMethod));
                 ApplyInputMethod();
+                chkNotification.Checked = settings.NotificationEnabled;
+                cmbNotificationPosition.SelectedIndex = Math.Max(0, Math.Min(4, settings.NotificationPosition));
+                numNotificationOpacity.Value = settings.NotificationOpacity;
+                cmbNotificationPosition.Enabled = settings.NotificationEnabled;
+                numNotificationOpacity.Enabled = settings.NotificationEnabled;
+                UpdateToastManager();
             }
             finally
             {
@@ -466,6 +498,12 @@ namespace MouseMaster
             return num;
         }
         private void UpdateStatus(Label lbl, string text, Color c) { if (InvokeRequired) Invoke(new Action(() => UpdateStatus(lbl, text, c))); else { lbl.Text = text; lbl.ForeColor = c; } }
+        private void UpdateToastManager()
+        {
+            _toastManager.Enabled = settings.NotificationEnabled;
+            _toastManager.Position = (ToastPosition)settings.NotificationPosition;
+            _toastManager.Opacity = settings.NotificationOpacity;
+        }
         private void Shutdown() { _keyboardHook?.Uninstall(); _mouseHook?.Uninstall(); InputSimulator.Shutdown(); }
     }
 }
