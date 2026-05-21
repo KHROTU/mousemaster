@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Get version
+      id: get_version
+      shell: powershell
+      run: |
+        [xml]$csproj = Get-Content MouseMaster.csproj -Raw
+        $version = $csproj.Project.PropertyGroup.Version
+        "VERSION=$version" >> $env:GITHUB_ENV
+        "version=$version" >> $env:GITHUB_OUTPUT
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+
+    - name: Restore dependencies
+      run: dotnet restore MouseMaster.csproj
+
+    - name: Build project
+      run: dotnet build MouseMaster.csproj --configuration Release --no-restore
+
+    - name: Publish file
+      run: dotnet publish MouseMaster.csproj --configuration Release --output ./publish --self-contained true -p:PublishSingleFile=true -p:RuntimeIdentifier=win-x64
+
+    - name: Zip it up
+      shell: powershell
+      run: |
+        Compress-Archive -Path ./publish/* -DestinationPath ./MouseMaster-v$env:VERSION.zip
+
+    - name: Remove existing release if present
+      shell: powershell
+      run: |
+        $tag = "v$env:VERSION"
+        gh release delete $tag --yes --cleanup-tag 2>$null
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Create release
+      shell: powershell
+      run: |
+        $tag = "v$env:VERSION"
+        gh release create $tag ./MouseMaster-v$env:VERSION.zip --title "Release v$env:VERSION" --generate-notes
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

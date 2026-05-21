@@ -47,7 +47,8 @@ namespace MouseMaster
             InitializeComponent();
             this.Controls.Clear();
             LoadSettings();
-            this.Text = "MouseMaster v0.2.0";
+            var version = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version;
+            this.Text = $"MouseMaster v{version?.Major ?? 0}.{version?.Minor ?? 0}.{version?.Build ?? 0}";
             this.Size = new Size(680, 640);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.BackColor = C_Background;

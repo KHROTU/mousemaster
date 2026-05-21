@@ -4,7 +4,7 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 namespace MouseMaster
 {
-    public class ClickSample
+    public struct ClickSample
     {
         public double IntervalMs { get; set; }
         public double HoldMs { get; set; }
@@ -148,18 +148,22 @@ namespace MouseMaster
             _targetBaseMs = ResolveTargetBaseMs(settings);
             _expectedCPS = 1000.0 / _targetBaseMs;
             _factor = settings.Randomize ? settings.RandomStrength / 10.0 : 0;
+            _ouTheta = new[] { OuTheta0, OuTheta1, OuTheta2, OuTheta3 };
+            _ouWeight = new[] { OuWeight0, OuWeight1, OuWeight2, OuWeight3 };
+            _ouState = new double[4];
+            RegenerateSessionProfile();
+            _prevInterval = _targetBaseMs * _personalTempo;
+            _nextMicroPause = MicroPauseIdxMin + _rnd.Next(MicroPauseIdxRange);
+            _warmupLen = WarmupMin + _rnd.Next(WarmupRange);
+            _lastTimestamp = Stopwatch.GetTimestamp();
+        }
+        private void RegenerateSessionProfile()
+        {
             _personalTempo = 1.0 + SkewGauss(0.3) * TempoRange;
             _personalTempoDrift = (_rnd.NextDouble() - 0.5) * TempoDriftHalfRange * 2.0;
             _personalBurstBias = 0.5 + (_rnd.NextDouble() - 0.5) * 0.3;
             _personalHoldCenter = HoldCenterMu + Gauss() * HoldCenterSigma;
-            _ouTheta = new[] { OuTheta0, OuTheta1, OuTheta2, OuTheta3 };
-            _ouWeight = new[] { OuWeight0, OuWeight1, OuWeight2, OuWeight3 };
-            _ouState = new double[4];
-            _prevInterval = _targetBaseMs * _personalTempo;
-            _nextMicroPause = MicroPauseIdxMin + _rnd.Next(MicroPauseIdxRange);
-            _warmupLen = WarmupMin + _rnd.Next(WarmupRange);
             _burstPhase = _rnd.NextDouble() * Math.PI * 2.0;
-            _lastTimestamp = Stopwatch.GetTimestamp();
         }
         private double Gauss()
         {
@@ -303,7 +307,12 @@ namespace MouseMaster
             double actualCV = Math.Sqrt(actualVar) / mean;
             double targetCV = Math.Max(_factor * AdaptiveTargetCVRatio, 1e-4);
             double ratio = actualCV / targetCV;
-            if (ratio < 0.7)
+            if (ratio < 0.5) 
+            {
+                _dynamicNoiseBoost = Math.Min(_dynamicNoiseBoost + 0.05, AdaptiveClampMax);
+                RegenerateSessionProfile(); 
+            }
+            else if (ratio < 0.7)
                 _dynamicNoiseBoost = Math.Min(_dynamicNoiseBoost + 0.02, AdaptiveClampMax);
             else if (ratio > 1.3)
                 _dynamicNoiseBoost = Math.Max(_dynamicNoiseBoost - 0.01, AdaptiveClampMin);
