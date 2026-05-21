@@ -44,12 +44,10 @@ jobs:
 
     - name: Remove existing release if present
       shell: powershell
+      continue-on-error: true
       run: |
         $tag = "v$env:VERSION"
-        $exists = gh release view $tag 2>$null
-        if ($LASTEXITCODE -eq 0) {
-          gh release delete $tag --yes --cleanup-tag
-        }
+        gh release delete $tag --yes --cleanup-tag
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
