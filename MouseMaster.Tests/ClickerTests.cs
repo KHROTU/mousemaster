@@ -8,7 +8,7 @@ namespace MouseMaster.Tests
 {
     public class ClickerTests
     {
-        private static readonly (int cps, int seed)[] TestCases = { (5, 1), (20, 2), (50, 3), (100, 4), (400, 5) };
+        private static readonly (int cps, int seed)[] TestCases = { (5, 1), (10, 2), (20, 3), (50, 4), (100, 5), (400, 6), (500, 7), (600, 8) };
         private readonly ITestOutputHelper _out;
         public ClickerTests(ITestOutputHelper output) => _out = output;
         private static List<double> GenerateIntervals(AppSettings settings, int count, int seed)
@@ -36,10 +36,13 @@ namespace MouseMaster.Tests
         }
         [Theory]
         [InlineData(5, 1)]
-        [InlineData(20, 2)]
-        [InlineData(50, 3)]
-        [InlineData(100, 4)]
-        [InlineData(400, 5)]
+        [InlineData(10, 2)]
+        [InlineData(20, 3)]
+        [InlineData(50, 4)]
+        [InlineData(100, 5)]
+        [InlineData(400, 6)]
+        [InlineData(500, 7)]
+        [InlineData(600, 8)]
         public void ClickIntervals_ShouldNotHaveExactDuplicates(int cps, int seed)
         {
             var settings = new AppSettings { IsManualInterval = false, TargetCPS = cps, Randomize = true, RandomStrength = 8 };
@@ -58,10 +61,13 @@ namespace MouseMaster.Tests
         }
         [Theory]
         [InlineData(5, 1)]
-        [InlineData(20, 2)]
-        [InlineData(50, 3)]
-        [InlineData(100, 4)]
-        [InlineData(400, 5)]
+        [InlineData(10, 2)]
+        [InlineData(20, 3)]
+        [InlineData(50, 4)]
+        [InlineData(100, 5)]
+        [InlineData(400, 6)]
+        [InlineData(500, 7)]
+        [InlineData(600, 8)]
         public void ClickIntervals_ShouldNotBeTooCorrelated(int cps, int seed)
         {
             var settings = new AppSettings { IsManualInterval = false, TargetCPS = cps, Randomize = true, RandomStrength = 8 };
@@ -72,10 +78,13 @@ namespace MouseMaster.Tests
         }
         [Theory]
         [InlineData(5, 1)]
-        [InlineData(20, 2)]
-        [InlineData(50, 3)]
-        [InlineData(100, 4)]
-        [InlineData(400, 5)]
+        [InlineData(10, 2)]
+        [InlineData(20, 3)]
+        [InlineData(50, 4)]
+        [InlineData(100, 5)]
+        [InlineData(400, 6)]
+        [InlineData(500, 7)]
+        [InlineData(600, 8)]
         public void ClickIntervals_ShouldNotClusterAtIntegers(int cps, int seed)
         {
             var settings = new AppSettings { IsManualInterval = false, TargetCPS = cps, Randomize = true, RandomStrength = 8 };
@@ -87,10 +96,13 @@ namespace MouseMaster.Tests
         }
         [Theory]
         [InlineData(5, 1)]
-        [InlineData(20, 2)]
-        [InlineData(50, 3)]
-        [InlineData(100, 4)]
-        [InlineData(400, 5)]
+        [InlineData(10, 2)]
+        [InlineData(20, 3)]
+        [InlineData(50, 4)]
+        [InlineData(100, 5)]
+        [InlineData(400, 6)]
+        [InlineData(500, 7)]
+        [InlineData(600, 8)]
         public void ClickIntervals_ShouldNotHitHardFloor(int cps, int seed)
         {
             var settings = new AppSettings { IsManualInterval = false, TargetCPS = cps, Randomize = true, RandomStrength = 8 };
@@ -102,10 +114,13 @@ namespace MouseMaster.Tests
         }
         [Theory]
         [InlineData(5, 1)]
-        [InlineData(20, 2)]
-        [InlineData(50, 3)]
-        [InlineData(100, 4)]
-        [InlineData(400, 5)]
+        [InlineData(10, 2)]
+        [InlineData(20, 3)]
+        [InlineData(50, 4)]
+        [InlineData(100, 5)]
+        [InlineData(400, 6)]
+        [InlineData(500, 7)]
+        [InlineData(600, 8)]
         public void ClickIntervals_ShouldHaveReasonablePeriodicity(int cps, int seed)
         {
             var settings = new AppSettings { IsManualInterval = false, TargetCPS = cps, Randomize = true, RandomStrength = 8 };

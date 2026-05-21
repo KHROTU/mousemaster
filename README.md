@@ -17,7 +17,10 @@ disclaimer: anyone with any competence can probably tell the algorithm is far fr
 - warm up: non-linear gradual speeding up phase for the first few clicks.
 - log-normal micro-pauses: random pauses drawn from a log-normal distribution to simulate hesitation or small fuckups. [learn more](https://en.wikipedia.org/wiki/Log-normal_distribution)
 - exponential distribution based events: occasional simulated big fuckups via exponential distribution to break overly uniform patterns. [learn more](https://en.wikipedia.org/wiki/Exponential_distribution)
-- cursor jitter: 2D gaussian jitter with integrated drift dynamics for micro-movements during clicking. can fight with you when you're trying to move the mouse as well so just bear that in mind or turn it lower/off.
+- stochastic burst rhythm: per-session rhythmic bias that evolves via a continuous phase walk instead of toggling, so there's no detectable period-2 alternation in the interval series.
+- personal tempo drift: each session gets its own base tempo so sustained click patterns don't look identical across sessions. also whenever it breaks i can say "not quite my tempo".
+- adaptive noise scaling: rolling variance feedback that adjusts noise intensity in real time to keep the output distribution consistent regardless of cps target.
+- cursor jitter: 2D gaussian jitter with integrated drift dynamics and arousal/fatigue modulation for micro-movements during clicking. drift reversion is time-scaled so the character is the same at any cps. can fight with you when you're trying to move the mouse as well so just bear that in mind or turn it lower/off.
 - interception support: optional kernel-level input via the interception driver for lower-level simulation and doesn't add flags like `mouse_event` does. again if the ac just looks for interception SPECIFICALLY then you're extra fucked since you would be banned instantly.
 - high precision timing: hybrid `Stopwatch` + `Thread.SpinWait` solution for better interval control.
 
@@ -28,15 +31,16 @@ disclaimer: anyone with any competence can probably tell the algorithm is far fr
 
     |target|real|mean|stddev|bitwise dupes|near floor|
     |-|-|-|-|-|-|
-    |5|4.8|209.62ms|21.75ms|0|0|
-    |10|9.4|106.28ms|12.01ms|0|0|
-    |20|18.8|53.25ms|5.43ms|0|0|
-    |50|48.8|20.47ms|2.92ms|0|0|
-    |400|395.6|2.53ms|0.23ms|0|0|
-    |500|460.9|2.17ms|0.16ms|0|45|
-    |600|442.7|2.26ms|0.15ms|0|19|
+    |5|5.0|200.06ms|21.66ms|0|0|
+    |10|9.5|105.31ms|12.67ms|0|0|
+    |20|18.4|54.37ms|8.18ms|0|0|
+    |50|47.6|20.99ms|2.46ms|0|0|
+    |100|95.0|10.53ms|1.15ms|0|0|
+    |400|370.6|2.70ms|0.22ms|0|0|
+    |500|433.3|2.31ms|0.25ms|0|0|
+    |600|440.2|2.27ms|0.10ms|0|0|
 
-    notice how as the target cps increases the real cps gets capped at around 460.
+    notice how as the target cps increases the real cps gets capped at around 440, and 500 and 600 are converging as the floor starts to take effect.
 
 ## Installation
 

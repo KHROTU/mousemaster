@@ -38,7 +38,6 @@ namespace MouseMaster
         private RadioButton rbManual, rbCPS;
         private Button btnSetAutoClickHotkey;
         private Label lblAutoClickStatus;
-        private Label lblHotkeyListening;
         private CheckBox chkRandom, chkJitter, chkFixed, chkStop;
         private CheckBox chkNotification;
         private ComboBox cmbNotificationPosition;

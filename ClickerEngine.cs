@@ -20,8 +20,8 @@ namespace MouseMaster
         private const double OuWeight2 = 0.028;
         private const double OuWeight3 = 0.020;
         private const double TempoRange = 0.02;
-        private const double TempoDriftHalfRange = 0.00004;
-        private const double TempoJitter = 0.00003;
+        private const double TempoDriftHalfRange = 0.0006;
+        private const double TempoJitter = 0.00015;
         private const double TempoClampMin = 0.92;
         private const double TempoClampMax = 1.08;
         private const double MomentumMin = 0.08;
@@ -31,7 +31,6 @@ namespace MouseMaster
         private const double BurstAmpSlow = 0.10;
         private const double BurstAmpFast = 0.04;
         private const double BurstNoiseFactor = 0.025;
-        private const double BurstFlipProb = 0.03;
         private const double BurstThreshold = 80.0;
         private const double FatigueOnsetFast = 0.00012;
         private const double FatigueDecayFast = 0.05;
@@ -77,7 +76,7 @@ namespace MouseMaster
         private const int RollingWindowSize = 50;
         private const int RollingWindowMinSamples = 10;
         private const double AdaptiveStrength = 0.2;
-        private const double AdaptiveTargetVarRatio = 0.035;
+        private const double AdaptiveTargetCVRatio = 0.08;
         private const double AdaptiveClampMin = 0.5;
         private const double AdaptiveClampMax = 2.0;
         private const double MinDtClicks = 0.5;
@@ -99,7 +98,7 @@ namespace MouseMaster
         private double _prevInterval;
         private double _shortFatigue;
         private double _longFatigue;
-        private bool _burstFlip;
+        private double _burstPhase;
         private int _nextMicroPause;
         private double _driftTarget, _driftCurrent;
         private int _warmupLen;
@@ -111,6 +110,29 @@ namespace MouseMaster
         private int _rollingCount;
         private double _rollingSum;
         private double _rollingSumSq;
+        private static double ResolveTargetBaseMs(AppSettings settings)
+        {
+            double baseMs = settings.IsManualInterval
+                ? (double)Math.Max(settings.IntervalSeconds, 0.001M) * 1000.0
+                : 1000.0 / Math.Clamp((double)settings.TargetCPS, 1.0, 500.0);
+
+            if (!double.IsFinite(baseMs) || baseMs <= 0.0)
+                return IntervalFloor;
+
+            return Math.Max(IntervalFloor, baseMs);
+        }
+        private static double ClampHoldMs(double holdMs, double intervalMs)
+        {
+            if (!double.IsFinite(intervalMs) || intervalMs <= 0.0)
+                intervalMs = IntervalFloor;
+
+            if (!double.IsFinite(holdMs) || holdMs <= 0.0)
+                holdMs = intervalMs * HoldCenterMu;
+
+            double maxHold = Math.Max(AbsoluteMinInterval, intervalMs * 0.85);
+            double minHold = Math.Min(HoldClampLow, maxHold);
+            return Math.Clamp(holdMs, minHold, maxHold);
+        }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static double SmoothMax(double x, double floor, double scale)
         {
@@ -123,9 +145,7 @@ namespace MouseMaster
         {
             _rnd = new FastRng(seed.HasValue ? (ulong)seed.Value ^ 0x9e3779b97f4a7c15uL : (ulong)Environment.TickCount64);
             _settings = settings;
-            _targetBaseMs = settings.IsManualInterval
-                ? (double)settings.IntervalSeconds * 1000.0
-                : 1000.0 / (double)Math.Max(1, settings.TargetCPS);
+            _targetBaseMs = ResolveTargetBaseMs(settings);
             _expectedCPS = 1000.0 / _targetBaseMs;
             _factor = settings.Randomize ? settings.RandomStrength / 10.0 : 0;
             _personalTempo = 1.0 + SkewGauss(0.3) * TempoRange;
@@ -138,6 +158,7 @@ namespace MouseMaster
             _prevInterval = _targetBaseMs * _personalTempo;
             _nextMicroPause = MicroPauseIdxMin + _rnd.Next(MicroPauseIdxRange);
             _warmupLen = WarmupMin + _rnd.Next(WarmupRange);
+            _burstPhase = _rnd.NextDouble() * Math.PI * 2.0;
             _lastTimestamp = Stopwatch.GetTimestamp();
         }
         private double Gauss()
@@ -178,7 +199,7 @@ namespace MouseMaster
                 _lastTimestamp = now;
                 _clickCount++;
                 _prevInterval = _targetBaseMs;
-                return new ClickSample { IntervalMs = _targetBaseMs, HoldMs = _targetBaseMs * HoldCenterMu };
+                return new ClickSample { IntervalMs = _targetBaseMs, HoldMs = ClampHoldMs(_targetBaseMs * HoldCenterMu, _targetBaseMs) };
             }
             double dtRaw = (now - _lastTimestamp) / (double)Stopwatch.Frequency;
             _lastTimestamp = now;
@@ -207,12 +228,11 @@ namespace MouseMaster
             if (_targetBaseMs <= BurstThreshold)
             {
                 double burstAmp = _targetBaseMs < 3 ? BurstAmpFast : BurstAmpSlow;
-                _burstFlip = !_burstFlip;
+                _burstPhase += Math.PI + Gauss() * 0.8;
                 double amp = _targetBaseMs * burstAmp * effectiveFactor;
-                double shift = _burstFlip ? -amp * _personalBurstBias : amp * (1.0 - _personalBurstBias);
+                double shift = Math.Sin(_burstPhase) * amp * (0.5 + _personalBurstBias * 0.5);
                 shift += Gauss() * _targetBaseMs * BurstNoiseFactor * effectiveFactor;
                 currentInterval += shift;
-                if (_rnd.NextDouble() < BurstFlipProb) _burstFlip = !_burstFlip;
             }
             _shortFatigue += (FatigueOnsetFast - _shortFatigue * FatigueDecayFast) * dtClicks;
             _longFatigue += (FatigueOnsetSlow - _longFatigue * FatigueDecaySlow) * dtClicks;
@@ -246,7 +266,7 @@ namespace MouseMaster
                 else if (roll < WarmupProbTypeB)
                     warmupExtra = _targetBaseMs * (gentleWarmup ? WarmupFastExtra + _rnd.NextDouble() * WarmupFastExtraRange : WarmupSlowExtra + _rnd.NextDouble() * WarmupSlowExtraRange);
                 else
-                    warmupExtra = Math.Abs(Gauss()) * _targetBaseMs * (gentleWarmup ? WarmupGaussFast : WarmupGaussSlow) * (1.0 - progress * WarmupProgressDecay);
+                    warmupExtra = Gauss() * _targetBaseMs * (gentleWarmup ? WarmupGaussFast : WarmupGaussSlow) * (1.0 - progress * WarmupProgressDecay);
                 currentInterval += warmupExtra;
             }
             if (_rnd.NextDouble() < RarePauseProb * effectiveFactor)
@@ -258,7 +278,7 @@ namespace MouseMaster
             double holdMs = baseHold * Math.Exp(HoldLogSigma * Gauss() + HoldMotorRho * z_motor);
             if (_rnd.NextDouble() < HoldOccasionalProb)
                 holdMs *= Math.Exp(Gauss() * HoldOccasionalSigma);
-            holdMs = Math.Max(HoldClampLow, holdMs);
+            holdMs = ClampHoldMs(holdMs, currentInterval);
             if (_rollingCount == RollingWindowSize)
             {
                 double old = _rollingWindow[_rollingIdx];
@@ -279,12 +299,10 @@ namespace MouseMaster
             if (_rollingCount < RollingWindowMinSamples) return;
             double mean = _rollingSum / _rollingCount;
             double actualVar = _rollingSumSq / _rollingCount - mean * mean;
-            if (actualVar <= 0) return;
-            double targetVar = (_targetBaseMs * _factor * AdaptiveTargetVarRatio);
-            targetVar = Math.Max(targetVar * targetVar, 1e-12);
-            double actualStd = Math.Sqrt(actualVar);
-            double targetStd = Math.Sqrt(targetVar);
-            double ratio = actualStd / Math.Max(targetStd, 1e-6);
+            if (actualVar <= 0 || mean <= 0) return;
+            double actualCV = Math.Sqrt(actualVar) / mean;
+            double targetCV = Math.Max(_factor * AdaptiveTargetCVRatio, 1e-4);
+            double ratio = actualCV / targetCV;
             if (ratio < 0.7)
                 _dynamicNoiseBoost = Math.Min(_dynamicNoiseBoost + 0.02, AdaptiveClampMax);
             else if (ratio > 1.3)

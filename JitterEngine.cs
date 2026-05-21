@@ -28,11 +28,22 @@ namespace MouseMaster
         private bool _firstCall = true;
         private double _targetCPS;
         private double _gaussSpare = double.NaN;
+        private static double ResolveTargetCPS(AppSettings settings)
+        {
+            double cps = settings.IsManualInterval
+                ? 1.0 / Math.Max((double)settings.IntervalSeconds, 0.001)
+                : (double)settings.TargetCPS;
+
+            if (!double.IsFinite(cps) || cps <= 0.0)
+                return 1.0;
+
+            return Math.Clamp(cps, 1.0, 500.0);
+        }
         public JitterEngine(AppSettings settings, int? seed = null)
         {
             _settings = settings;
             _rnd = new FastRng(seed.HasValue ? (ulong)seed.Value ^ 0xC0FFEE42BABEFACEuL : (ulong)Environment.TickCount64);
-            _targetCPS = settings.IsManualInterval ? 1000.0 / (double)settings.IntervalSeconds : (double)settings.TargetCPS;
+            _targetCPS = ResolveTargetCPS(settings);
             _lastTimestamp = Stopwatch.GetTimestamp();
         }
         private double Gauss()
@@ -59,7 +70,6 @@ namespace MouseMaster
         {
             if (!_settings.Jitter)
             {
-                _firstCall = false;
                 _lastTimestamp = Stopwatch.GetTimestamp();
                 return (0, 0);
             }
@@ -81,13 +91,24 @@ namespace MouseMaster
             _fatigueLong = Math.Clamp(_fatigueLong, 0.0, 1.0);
             double fatigueTotal = _fatigueShort * 0.4 + _fatigueLong * 0.6;
             double scale = 1.0 + _arousal * ArousalJitterGain + fatigueTotal * FatigueJitterGain;
-            _driftX += Gauss() * DriftNoise - _driftX * DriftReversion;
-            _driftY += Gauss() * DriftNoise - _driftY * DriftReversion;
+            double clickEquivalentDt = Math.Clamp(_targetCPS * dt, 0.05, 5.0);
+            double driftReversion = 1.0 - Math.Exp(-DriftReversion * clickEquivalentDt);
+            double driftNoise = DriftNoise * Math.Sqrt(clickEquivalentDt);
+            _driftX += Gauss() * driftNoise - _driftX * driftReversion;
+            _driftY += Gauss() * driftNoise - _driftY * driftReversion;
+            int jitterX = Math.Max(0, _settings.JitterX);
+            int jitterY = Math.Max(0, _settings.JitterY);
+            double maxDriftX = Math.Max(1.0, jitterX * 1.5);
+            double maxDriftY = Math.Max(1.0, jitterY * 1.5);
+            _driftX = Math.Clamp(_driftX, -maxDriftX, maxDriftX);
+            _driftY = Math.Clamp(_driftY, -maxDriftY, maxDriftY);
             if (_rnd.NextDouble() < SparsityThreshold)
                 return (0, 0);
-            int jx = (int)Math.Round(Gauss() * _settings.JitterX * BaseAmp * scale + _driftX);
-            int jy = (int)Math.Round(Gauss() * _settings.JitterY * BaseAmp * scale + _driftY);
-            return (jx, jy);
+            int maxStepX = Math.Max(1, jitterX * 3);
+            int maxStepY = Math.Max(1, jitterY * 3);
+            int jitterStepX = (int)Math.Round(Gauss() * jitterX * BaseAmp * scale + _driftX);
+            int jitterStepY = (int)Math.Round(Gauss() * jitterY * BaseAmp * scale + _driftY);
+            return (Math.Clamp(jitterStepX, -maxStepX, maxStepX), Math.Clamp(jitterStepY, -maxStepY, maxStepY));
         }
         public void Reset()
         {
