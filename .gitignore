@@ -19,9 +19,6 @@ packages/
 *.nupkg
 project.lock.json
 project.fragment.lock.json
-.kilo/
+MouseMaster.Tests/*.json
+MouseMaster.Tests/**/*.json
 
-# Auto-added by export script
-.export.state.json
-.exportignore.json
-context.txt

@@ -8,7 +8,6 @@ namespace MouseMaster
     {
         private const double DriftNoise = 0.15;
         private const double DriftReversion = 0.01;
-        private const double SparsityThreshold = 0.20;
         private const double BaseAmp = 0.4;
         private const double ArousalRiseTauSec = 2.0;
         private const double ArousalDecayTauSec = 4.0;
@@ -17,6 +16,13 @@ namespace MouseMaster
         private const double FatigueDecayFast = 0.04;
         private const double FatigueDecaySlow = 0.003;
         private const double FatigueJitterGain = 0.2;
+        private const double MotorDampingPerSec = 8.0;
+        private const double MotorNoiseBase = 0.55;
+        private const double MotorCrossCoupling = 0.18;
+        private const double TremorGain = 0.22;
+        private const double TremorPhaseNoise = 0.35;
+        private const double SparseBaseRate = 0.45;
+        private const double SparseAmpRate = 0.11;
         private const double MinDtSec = 0.001;
         private const double MaxDtSec = 3.0;
         private readonly FastRng _rnd;
@@ -28,6 +34,9 @@ namespace MouseMaster
         private bool _firstCall = true;
         private double _targetCPS;
         private double _gaussSpare = double.NaN;
+        private double _velX, _velY;
+        private double _tremorPhaseX, _tremorPhaseY;
+        private double _tremorFreqX, _tremorFreqY;
         private static double ResolveTargetCPS(AppSettings settings)
         {
             double cps = settings.IsManualInterval
@@ -44,6 +53,10 @@ namespace MouseMaster
             _settings = settings;
             _rnd = new FastRng(seed.HasValue ? (ulong)seed.Value ^ 0xC0FFEE42BABEFACEuL : (ulong)Environment.TickCount64);
             _targetCPS = ResolveTargetCPS(settings);
+            _tremorPhaseX = _rnd.NextDouble() * Math.PI * 2.0;
+            _tremorPhaseY = _rnd.NextDouble() * Math.PI * 2.0;
+            _tremorFreqX = 7.0 + _rnd.NextDouble() * 5.0;
+            _tremorFreqY = 7.0 + _rnd.NextDouble() * 5.0;
             _lastTimestamp = Stopwatch.GetTimestamp();
         }
         private double Gauss()
@@ -96,25 +109,44 @@ namespace MouseMaster
             double driftNoise = DriftNoise * Math.Sqrt(clickEquivalentDt);
             _driftX += Gauss() * driftNoise - _driftX * driftReversion;
             _driftY += Gauss() * driftNoise - _driftY * driftReversion;
+            double motorDecay = Math.Exp(-MotorDampingPerSec * dt);
+            double motorSigma = MotorNoiseBase * Math.Sqrt(dt) * scale;
+            double crossX = _velY * MotorCrossCoupling;
+            double crossY = _velX * MotorCrossCoupling;
+            _velX = _velX * motorDecay + crossX * (1.0 - motorDecay) + Gauss() * motorSigma;
+            _velY = _velY * motorDecay + crossY * (1.0 - motorDecay) + Gauss() * motorSigma;
             int jitterX = Math.Max(0, _settings.JitterX);
             int jitterY = Math.Max(0, _settings.JitterY);
             double maxDriftX = Math.Max(1.0, jitterX * 1.5);
             double maxDriftY = Math.Max(1.0, jitterY * 1.5);
             _driftX = Math.Clamp(_driftX, -maxDriftX, maxDriftX);
             _driftY = Math.Clamp(_driftY, -maxDriftY, maxDriftY);
-            if (_rnd.NextDouble() < SparsityThreshold)
+            _tremorPhaseX += 2.0 * Math.PI * _tremorFreqX * dt + Gauss() * TremorPhaseNoise * Math.Sqrt(dt);
+            _tremorPhaseY += 2.0 * Math.PI * _tremorFreqY * dt + Gauss() * TremorPhaseNoise * Math.Sqrt(dt);
+            double tremorX = Math.Sin(_tremorPhaseX) * jitterX * TremorGain * scale;
+            double tremorY = Math.Sin(_tremorPhaseY) * jitterY * TremorGain * scale;
+
+            double amp = Math.Sqrt(jitterX * jitterX + jitterY * jitterY);
+            double eventRate = SparseBaseRate + SparseAmpRate * amp * scale;
+            double pSilent = Math.Exp(-eventRate * clickEquivalentDt);
+            if (_rnd.NextDouble() < pSilent)
                 return (0, 0);
             int maxStepX = Math.Max(1, jitterX * 3);
             int maxStepY = Math.Max(1, jitterY * 3);
-            int jitterStepX = (int)Math.Round(Gauss() * jitterX * BaseAmp * scale + _driftX);
-            int jitterStepY = (int)Math.Round(Gauss() * jitterY * BaseAmp * scale + _driftY);
+            int jitterStepX = (int)Math.Round(Gauss() * jitterX * BaseAmp * scale + _driftX + _velX + tremorX);
+            int jitterStepY = (int)Math.Round(Gauss() * jitterY * BaseAmp * scale + _driftY + _velY + tremorY);
             return (Math.Clamp(jitterStepX, -maxStepX, maxStepX), Math.Clamp(jitterStepY, -maxStepY, maxStepY));
         }
         public void Reset()
         {
             _driftX = _driftY = 0;
+            _velX = _velY = 0;
             _arousal = 0;
             _fatigueShort = _fatigueLong = 0;
+            _tremorPhaseX = _rnd.NextDouble() * Math.PI * 2.0;
+            _tremorPhaseY = _rnd.NextDouble() * Math.PI * 2.0;
+            _tremorFreqX = 7.0 + _rnd.NextDouble() * 5.0;
+            _tremorFreqY = 7.0 + _rnd.NextDouble() * 5.0;
             _firstCall = true;
             _lastTimestamp = Stopwatch.GetTimestamp();
         }

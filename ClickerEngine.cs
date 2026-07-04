@@ -79,6 +79,14 @@ namespace MouseMaster
         private const double AdaptiveTargetCVRatio = 0.08;
         private const double AdaptiveClampMin = 0.5;
         private const double AdaptiveClampMax = 2.0;
+        private const double CvBase = 0.045;
+        private const double CvRandomStrengthGain = 0.09;
+        private const double CvSlowTempoGain = 0.08;
+        private const double CvFastTempoGain = 0.04;
+        private const double CvAdaptationMix = 0.18;
+        private const double HeavyTailMix = 0.32;
+        private const double QuantizationDitherMs = 0.45;
+        private const double QuantizationBlueMix = 0.68;
         private const double MinDtClicks = 0.5;
         private const double MaxDtClicks = 5.0;
         private const double AbsoluteMinInterval = 0.1;
@@ -110,6 +118,8 @@ namespace MouseMaster
         private int _rollingCount;
         private double _rollingSum;
         private double _rollingSumSq;
+        private double _ditherPrevWhite;
+        private double _ditherBlue;
         private static double ResolveTargetBaseMs(AppSettings settings)
         {
             double baseMs = settings.IsManualInterval
@@ -195,6 +205,26 @@ namespace MouseMaster
         {
             return (_rnd.NextDouble() - 0.5) * AnalogNoiseUniform + Gauss() * AnalogNoiseGauss;
         }
+        private double Laplace(double scale = 1.0)
+        {
+            double u = Math.Clamp(_rnd.NextDouble(), 1e-12, 1.0 - 1e-12);
+            return scale * (u < 0.5 ? Math.Log(2.0 * u) : -Math.Log(2.0 * (1.0 - u)));
+        }
+        private double ComputeTargetCv()
+        {
+            double cps = _expectedCPS;
+            double slowTerm = CvSlowTempoGain / (1.0 + cps / 7.0);
+            double fastTerm = CvFastTempoGain * Math.Clamp((cps - 12.0) / 90.0, 0.0, 1.0);
+            return CvBase + CvRandomStrengthGain * _factor + slowTerm + fastTerm;
+        }
+        private double QuantizationDither(double effectiveFactor)
+        {
+            double white = _rnd.NextDouble() - 0.5;
+            _ditherBlue = QuantizationBlueMix * _ditherBlue + (1.0 - QuantizationBlueMix) * white;
+            double highPass = white - _ditherPrevWhite;
+            _ditherPrevWhite = white;
+            return (0.55 * highPass + 0.45 * (_ditherBlue - white)) * QuantizationDitherMs * effectiveFactor;
+        }
         public ClickSample Next()
         {
             long now = Stopwatch.GetTimestamp();
@@ -275,6 +305,23 @@ namespace MouseMaster
             }
             if (_rnd.NextDouble() < RarePauseProb * effectiveFactor)
                 currentInterval += -Math.Log(1.0 - _rnd.NextDouble()) * _targetBaseMs * RarePauseScale;
+            double targetCv = ComputeTargetCv();
+            double logSigma = Math.Sqrt(Math.Log(1.0 + targetCv * targetCv));
+            double shapedResidual = (1.0 - HeavyTailMix) * Gauss() + HeavyTailMix * Laplace();
+            currentInterval *= Math.Exp(logSigma * shapedResidual);
+
+            if (_rollingCount >= RollingWindowMinSamples)
+            {
+                double mean = _rollingSum / _rollingCount;
+                double var = _rollingSumSq / _rollingCount - mean * mean;
+                if (mean > 0.0 && var > 0.0)
+                {
+                    double actualCv = Math.Sqrt(var) / mean;
+                    double cvError = (targetCv - actualCv) / Math.Max(targetCv, 1e-4);
+                    currentInterval *= 1.0 + CvAdaptationMix * cvError;
+                }
+            }
+            currentInterval += QuantizationDither(effectiveFactor);
             currentInterval = SmoothMax(currentInterval, IntervalFloor, SmoothFloorScale);
             currentInterval += AnalogNoise();
             currentInterval = Math.Max(AbsoluteMinInterval, currentInterval);
@@ -305,7 +352,7 @@ namespace MouseMaster
             double actualVar = _rollingSumSq / _rollingCount - mean * mean;
             if (actualVar <= 0 || mean <= 0) return;
             double actualCV = Math.Sqrt(actualVar) / mean;
-            double targetCV = Math.Max(_factor * AdaptiveTargetCVRatio, 1e-4);
+            double targetCV = Math.Max(ComputeTargetCv(), _factor * AdaptiveTargetCVRatio);
             double ratio = actualCV / targetCV;
             if (ratio < 0.5) 
             {
